@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 
 export const MAX_PARTY_SIZE = 20
 
+
 export type ReservationStatus = 'confirmada' | 'cancelada'
 
 export type Reservation = {
