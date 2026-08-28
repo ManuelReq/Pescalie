@@ -1,7 +1,5 @@
-import type { SupabaseClient } from '@supabase/supabase-js'
-
+export const MAX_CAPACITY = 120
 export const MAX_PARTY_SIZE = 20
-
 
 export type ReservationStatus = 'confirmada' | 'cancelada'
 
@@ -20,77 +18,47 @@ export type Reservation = {
 
 export type TimeSlot = { value: string; label: string }
 
-export type RestaurantSettings = {
-  maxCapacity: number
-  serviceDurationMinutes: number
-  kitchenOpenTime: string
-  kitchenCloseTime: string
-  weekendOpenTime: string
-}
-
 /**
- * Valores de reserva SOLO por si Supabase no responde (la web nunca debe
- * quedarse sin horario). La fuente de verdad real es la tabla
- * restaurant_settings en Supabase: para cambiar aforo u horarios se edita
- * ahí, no aquí.
+ * Horario de la cocina.
+ * Entre semana: servicio continuo de 12:00 a 23:00.
+ * Fin de semana (sábado y domingo): solo desde las 17:00 hasta las 23:00.
  */
-export const DEFAULT_SETTINGS: RestaurantSettings = {
-  maxCapacity: 120,
-  serviceDurationMinutes: 90,
-  kitchenOpenTime: '12:00',
-  kitchenCloseTime: '23:00',
-  weekendOpenTime: '17:00',
-}
+const WEEKDAY_OPEN = '12:00'
+const WEEKEND_OPEN = '17:00'
+const CLOSE_TIME = '23:00'
+const SLOT_STEP_MINUTES = 30
 
-/** Lee la configuración real (aforo, horarios) desde Supabase. */
-export async function fetchRestaurantSettings(
-  supabase: SupabaseClient,
-): Promise<RestaurantSettings> {
-  const { data, error } = await supabase.from('restaurant_settings').select('*').single()
-  if (error || !data) return DEFAULT_SETTINGS
-  return {
-    maxCapacity: data.max_capacity ?? DEFAULT_SETTINGS.maxCapacity,
-    serviceDurationMinutes:
-      data.service_duration_minutes ?? DEFAULT_SETTINGS.serviceDurationMinutes,
-    kitchenOpenTime: data.kitchen_open_time ?? DEFAULT_SETTINGS.kitchenOpenTime,
-    kitchenCloseTime: data.kitchen_close_time ?? DEFAULT_SETTINGS.kitchenCloseTime,
-    weekendOpenTime: data.weekend_open_time ?? DEFAULT_SETTINGS.weekendOpenTime,
-  }
-}
-
-/** Sábado o domingo, a partir de una fecha YYYY-MM-DD. */
-export function isWeekend(dateISO: string): boolean {
+function isWeekend(dateISO: string): boolean {
   const [y, m, d] = dateISO.split('-').map(Number)
   const day = new Date(y, m - 1, d).getDay() // 0 = domingo, 6 = sábado
   return day === 0 || day === 6
 }
 
-/**
- * Genera las franjas de media hora disponibles para una fecha, respetando
- * el horario de fin de semana (desde weekendOpenTime) o el horario normal
- * (desde kitchenOpenTime), hasta kitchenCloseTime. Servicio continuo, sin
- * hueco entre comida y cena.
- */
-export function generateSlots(dateISO: string, settings: RestaurantSettings): TimeSlot[] {
-  const openTime = isWeekend(dateISO) ? settings.weekendOpenTime : settings.kitchenOpenTime
-  const [openH, openM] = openTime.split(':').map(Number)
-  const [closeH, closeM] = settings.kitchenCloseTime.split(':').map(Number)
+function toMinutes(hhmm: string): number {
+  const [h, m] = hhmm.split(':').map(Number)
+  return h * 60 + m
+}
 
+function toHHMM(totalMinutes: number): string {
+  const h = Math.floor(totalMinutes / 60)
+  const m = totalMinutes % 60
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+}
+
+/** Genera los turnos disponibles para una fecha concreta según el horario. */
+export function getSlotsForDate(dateISO: string): TimeSlot[] {
+  const open = isWeekend(dateISO) ? WEEKEND_OPEN : WEEKDAY_OPEN
+  const start = toMinutes(open)
+  const end = toMinutes(CLOSE_TIME)
   const slots: TimeSlot[] = []
-  let minutes = openH * 60 + openM
-  const closeMinutes = closeH * 60 + closeM
-
-  while (minutes <= closeMinutes) {
-    const h = Math.floor(minutes / 60)
-    const m = minutes % 60
-    const value = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+  for (let t = start; t <= end; t += SLOT_STEP_MINUTES) {
+    const value = toHHMM(t)
     slots.push({ value, label: value })
-    minutes += 30
   }
   return slots
 }
 
-/** YYYY-MM-DD para hoy en hora local, usado como mínimo del selector de fecha. */
+/** YYYY-MM-DD for today in local time, used as the min date for the picker. */
 export function todayISO(): string {
   const now = new Date()
   const tz = now.getTimezoneOffset() * 60000
