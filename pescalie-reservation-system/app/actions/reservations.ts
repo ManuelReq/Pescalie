@@ -1,7 +1,7 @@
 'use server'
 
 import { createClient } from '@/lib/supabase/server'
-import { ALL_SLOTS, MAX_PARTY_SIZE } from '@/lib/reservations'
+import { getSlotsForDate, MAX_PARTY_SIZE } from '@/lib/reservations'
 
 export type CreateReservationInput = {
   date: string
@@ -32,21 +32,37 @@ export async function createReservationAction(
   if (!name || name.length < 2) {
     return { ok: false, message: 'Introduce un nombre válido.' }
   }
+
   if (!/^[0-9+()\s-]{6,20}$/.test(phone)) {
     return { ok: false, message: 'Introduce un teléfono válido.' }
   }
+
   if (!EMAIL_RE.test(email)) {
     return { ok: false, message: 'Introduce un email válido.' }
   }
-  if (!Number.isInteger(partySize) || partySize < 1 || partySize > MAX_PARTY_SIZE) {
-    return { ok: false, message: `El número de comensales debe estar entre 1 y ${MAX_PARTY_SIZE}.` }
+
+  if (
+    !Number.isInteger(partySize) ||
+    partySize < 1 ||
+    partySize > MAX_PARTY_SIZE
+  ) {
+    return {
+      ok: false,
+      message: `El número de comensales debe estar entre 1 y ${MAX_PARTY_SIZE}.`,
+    }
   }
+
   if (!input.date || !/^\d{4}-\d{2}-\d{2}$/.test(input.date)) {
     return { ok: false, message: 'Selecciona una fecha válida.' }
   }
-  if (!ALL_SLOTS.some((s) => s.value === input.time)) {
+
+  // Validate that the selected time is valid for the selected date.
+  const validSlots = getSlotsForDate(input.date)
+
+  if (!validSlots.some((s) => s.value === input.time)) {
     return { ok: false, message: 'Selecciona un turno válido.' }
   }
+
   if (input.date < new Date().toISOString().slice(0, 10)) {
     return { ok: false, message: 'No puedes reservar en una fecha pasada.' }
   }
@@ -81,6 +97,7 @@ export async function createReservationAction(
   if (!result?.ok) {
     if (result?.error === 'no_capacity') {
       const remaining = result.remaining ?? 0
+
       return {
         ok: false,
         message:
@@ -89,8 +106,15 @@ export async function createReservationAction(
             : 'Ese turno está completo. Por favor elige otro horario.',
       }
     }
-    return { ok: false, message: 'No se pudo completar la reserva. Revisa los datos.' }
+
+    return {
+      ok: false,
+      message: 'No se pudo completar la reserva. Revisa los datos.',
+    }
   }
 
-  return { ok: true, remaining: result.remaining ?? 0 }
+  return {
+    ok: true,
+    remaining: result.remaining ?? 0,
+  }
 }
