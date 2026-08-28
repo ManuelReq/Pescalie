@@ -1,16 +1,13 @@
 'use client'
 
-import { useEffect, useMemo, useState, useTransition } from 'react'
+import { useMemo, useState, useTransition } from 'react'
 import { toast } from 'sonner'
 import { updateReservationStatus } from '@/app/actions/admin'
-import { createClient } from '@/lib/supabase/client'
 import {
-  DEFAULT_SETTINGS,
-  fetchRestaurantSettings,
+  MAX_CAPACITY,
   formatLongDate,
   type Reservation,
   type ReservationStatus,
-  type RestaurantSettings,
 } from '@/lib/reservations'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -32,20 +29,7 @@ export function AdminReservations({
   const [filter, setFilter] = useState<Filter>('todas')
   const [rows, setRows] = useState<Reservation[]>(reservations)
   const [pendingId, setPendingId] = useState<string | null>(null)
-  const [settings, setSettings] = useState<RestaurantSettings>(DEFAULT_SETTINGS)
   const [, startTransition] = useTransition()
-
-  // Load restaurant settings (aforo) from Supabase once on mount.
-  useEffect(() => {
-    let cancelled = false
-    const supabase = createClient()
-    fetchRestaurantSettings(supabase).then((s) => {
-      if (!cancelled) setSettings(s)
-    })
-    return () => {
-      cancelled = true
-    }
-  }, [])
 
   const dayRows = useMemo(
     () => rows.filter((r) => r.reservation_date === date),
@@ -57,8 +41,7 @@ export function AdminReservations({
     [dayRows, filter],
   )
 
-  // Group by turn for a readable overview. Built from the actual data
-  // instead of a fixed slot list, since los horarios ahora son dinámicos.
+  // Group by turn for a readable overview.
   const byTurn = useMemo(() => {
     const map = new Map<string, Reservation[]>()
     for (const r of visibleRows) {
@@ -66,11 +49,11 @@ export function AdminReservations({
       list.push(r)
       map.set(r.reservation_time, list)
     }
-    return Array.from(map.entries())
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([time, items]) => ({
+        return Array.from(map.keys())
+      .sort((a, b) => a.localeCompare(b))
+      .map((time) => ({
         time,
-        items: items.sort((a, b) => a.name.localeCompare(b.name)),
+        items: map.get(time)!.sort((a, b) => a.name.localeCompare(b.name)),
       }))
   }, [visibleRows])
 
@@ -131,11 +114,7 @@ export function AdminReservations({
         <SummaryStat label="Reservas del día" value={dayRows.length} />
         <SummaryStat label="Confirmadas" value={dayRows.filter((r) => r.status === 'confirmada').length} />
         <SummaryStat label="Canceladas" value={dayRows.filter((r) => r.status === 'cancelada').length} />
-        <SummaryStat
-          label="Comensales"
-          value={confirmedGuests}
-          hint={`aforo máx. ${settings.maxCapacity}`}
-        />
+        <SummaryStat label="Comensales" value={confirmedGuests} hint={`aforo/turno ${MAX_CAPACITY}`} />
       </div>
 
       <p className="text-sm text-muted-foreground">{formatLongDate(date)}</p>
@@ -158,7 +137,7 @@ export function AdminReservations({
                     Turno {turn.time}
                   </h3>
                   <span className="text-xs text-muted-foreground tabular-nums">
-                    {guests} pers. a esta hora
+                    {guests}/{MAX_CAPACITY} plazas
                   </span>
                 </div>
                 <div className="flex flex-col gap-2">
