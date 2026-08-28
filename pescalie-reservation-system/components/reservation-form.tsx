@@ -5,14 +5,11 @@ import { toast } from 'sonner'
 import { createReservationAction } from '@/app/actions/reservations'
 import { createClient } from '@/lib/supabase/client'
 import {
-  DEFAULT_SETTINGS,
+  getSlotsForDate,
+  MAX_CAPACITY,
   MAX_PARTY_SIZE,
-  fetchRestaurantSettings,
   formatLongDate,
-  generateSlots,
   todayISO,
-  type RestaurantSettings,
-  type TimeSlot,
 } from '@/lib/reservations'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -31,40 +28,24 @@ export function ReservationForm() {
 
   const [date, setDate] = useState(today)
   const [time, setTime] = useState<string>('')
+  const slots = useMemo(() => getSlotsForDate(date), [date])
   const [partySize, setPartySize] = useState(2)
   const [name, setName] = useState('')
   const [phone, setPhone] = useState('')
   const [email, setEmail] = useState('')
   const [notes, setNotes] = useState('')
 
-  const [settings, setSettings] = useState<RestaurantSettings>(DEFAULT_SETTINGS)
   const [availability, setAvailability] = useState<Availability>({ state: 'idle' })
   const [isPending, startTransition] = useTransition()
   const [done, setDone] = useState<null | { remaining: number }>(null)
 
-  // Load restaurant settings (aforo, horarios) from Supabase once on mount.
-  useEffect(() => {
-    let cancelled = false
-    const supabase = createClient()
-    fetchRestaurantSettings(supabase).then((s) => {
-      if (!cancelled) setSettings(s)
-    })
-    return () => {
-      cancelled = true
-    }
-  }, [])
 
-  // Time slots depend on the selected date (fin de semana vs. resto de días).
-  const slots: TimeSlot[] = useMemo(() => generateSlots(date, settings), [date, settings])
-
-  // If the previously selected time is no longer valid for this date
-  // (e.g. switched from a weekday to a weekend), clear it.
+  // Si cambia la fecha y la hora elegida ya no es válida para ese día, la reseteamos.
   useEffect(() => {
     if (time && !slots.some((s) => s.value === time)) {
       setTime('')
     }
   }, [slots, time])
-
   // Live capacity check against Supabase whenever date/time changes.
   useEffect(() => {
     if (!date || !time) {
@@ -184,13 +165,7 @@ export function ReservationForm() {
       {/* Time slots */}
       <div className="flex flex-col gap-3">
         <Label>Turno</Label>
-        {slots.length === 0 ? (
-          <p className="rounded-md bg-muted px-4 py-3 text-sm text-muted-foreground">
-            No hay horario disponible para este día.
-          </p>
-        ) : (
-          <SlotGroup slots={slots} value={time} onSelect={setTime} />
-        )}
+        <SlotGroup title="Horas disponibles" slots={slots} value={time} onSelect={setTime} />
       </div>
 
       {/* Party size */}
@@ -225,12 +200,7 @@ export function ReservationForm() {
       </div>
 
       {/* Availability status */}
-      <AvailabilityBadge
-        availability={availability}
-        partySize={partySize}
-        time={time}
-        maxCapacity={settings.maxCapacity}
-      />
+      <AvailabilityBadge availability={availability} partySize={partySize} time={time} />
 
       {/* Contact fields */}
       <div className="grid gap-4 sm:grid-cols-2">
@@ -291,32 +261,39 @@ export function ReservationForm() {
 }
 
 function SlotGroup({
+  title,
   slots,
   value,
   onSelect,
 }: {
+  title: string
   slots: { value: string; label: string }[]
   value: string
   onSelect: (v: string) => void
 }) {
   return (
-    <div className="flex flex-wrap gap-2">
-      {slots.map((slot) => (
-        <button
-          key={slot.value}
-          type="button"
-          onClick={() => onSelect(slot.value)}
-          aria-pressed={value === slot.value}
-          className={cn(
-            'rounded-md border px-3 py-1.5 text-sm font-medium tabular-nums transition-colors',
-            value === slot.value
-              ? 'border-primary bg-primary text-primary-foreground'
-              : 'border-input bg-background text-foreground hover:border-primary/50 hover:bg-secondary',
-          )}
-        >
-          {slot.label}
-        </button>
-      ))}
+    <div className="flex flex-col gap-2">
+      <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        {title}
+      </span>
+      <div className="flex flex-wrap gap-2">
+        {slots.map((slot) => (
+          <button
+            key={slot.value}
+            type="button"
+            onClick={() => onSelect(slot.value)}
+            aria-pressed={value === slot.value}
+            className={cn(
+              'rounded-md border px-3 py-1.5 text-sm font-medium tabular-nums transition-colors',
+              value === slot.value
+                ? 'border-primary bg-primary text-primary-foreground'
+                : 'border-input bg-background text-foreground hover:border-primary/50 hover:bg-secondary',
+            )}
+          >
+            {slot.label}
+          </button>
+        ))}
+      </div>
     </div>
   )
 }
@@ -325,12 +302,10 @@ function AvailabilityBadge({
   availability,
   partySize,
   time,
-  maxCapacity,
 }: {
   availability: Availability
   partySize: number
   time: string
-  maxCapacity: number
 }) {
   if (!time || availability.state === 'idle') {
     return (
@@ -357,7 +332,7 @@ function AvailabilityBadge({
   const { remaining } = availability
   const full = remaining <= 0
   const over = partySize > remaining
-  const pct = Math.round(((maxCapacity - remaining) / maxCapacity) * 100)
+  const pct = Math.round(((MAX_CAPACITY - remaining) / MAX_CAPACITY) * 100)
 
   return (
     <div
@@ -372,7 +347,7 @@ function AvailabilityBadge({
         <span>
           {full
             ? 'Turno completo'
-            : `${remaining} de ${maxCapacity} plazas disponibles`}
+            : `${remaining} de ${MAX_CAPACITY} plazas disponibles`}
         </span>
         {!full && !over && <span className="text-primary">Disponible</span>}
         {over && !full && <span>Supera el aforo</span>}
