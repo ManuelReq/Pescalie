@@ -1,5 +1,13 @@
-export const MAX_CAPACITY = 120
-export const MAX_PARTY_SIZE = 20
+export const MAX_PARTY_SIZE = 4
+export const MAX_TABLES = 10
+export const RESERVATION_DURATION_MINUTES = 150
+
+export const WHATSAPP_NUMBER = '34649940831' // formato internacional para el enlace wa.me
+export const WHATSAPP_DISPLAY = '649 94 08 31'
+
+export function whatsappLink(message: string): string {
+  return `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(message)}`
+}
 
 export type ReservationStatus = 'confirmada' | 'cancelada'
 
@@ -45,20 +53,32 @@ function toHHMM(totalMinutes: number): string {
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
 }
 
-/** Genera los turnos disponibles para una fecha concreta según el horario. */
+function currentMinutesLocal(): number {
+  const now = new Date()
+  return now.getHours() * 60 + now.getMinutes()
+}
+
+/**
+ * Genera los turnos disponibles para una fecha concreta según el horario.
+ * Si la fecha es hoy, oculta las horas que ya han empezado o pasado.
+ */
 export function getSlotsForDate(dateISO: string): TimeSlot[] {
   const open = isWeekend(dateISO) ? WEEKEND_OPEN : WEEKDAY_OPEN
   const start = toMinutes(open)
   const end = toMinutes(CLOSE_TIME)
+  const isToday = dateISO === todayISO()
+  const nowMinutes = isToday ? currentMinutesLocal() : -1
+
   const slots: TimeSlot[] = []
   for (let t = start; t <= end; t += SLOT_STEP_MINUTES) {
+    if (isToday && t <= nowMinutes) continue
     const value = toHHMM(t)
     slots.push({ value, label: value })
   }
   return slots
 }
 
-/** YYYY-MM-DD for today in local time, used as the min date for the picker. */
+/** YYYY-MM-DD para hoy en hora local, usado como mínimo del selector de fecha. */
 export function todayISO(): string {
   const now = new Date()
   const tz = now.getTimezoneOffset() * 60000
