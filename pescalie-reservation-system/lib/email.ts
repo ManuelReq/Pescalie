@@ -14,6 +14,7 @@ async function sendEmail({
   html: string
 }) {
   const apiKey = process.env.RESEND_API_KEY
+  console.log('[email] Intentando enviar a:', to, '| asunto:', subject, '| apiKey presente:', !!apiKey)
   if (!apiKey) {
     console.error('[email] RESEND_API_KEY no configurada, email no enviado.')
     return
