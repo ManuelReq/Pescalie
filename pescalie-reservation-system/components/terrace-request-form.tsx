@@ -39,8 +39,13 @@ export function TerraceRequestForm() {
     accepted &&
     !isPending
 
-  function handleSubmit(e: React.FormEvent) {
+  // Antes era un onSubmit de <form>. Al vivir dentro del formulario principal
+  // de reservas, no puede haber un <form> anidado dentro de otro <form>
+  // (no es válido en HTML), así que este botón dispara el envío directamente
+  // con onClick en lugar de depender de un submit nativo.
+  function handleSend(e: React.MouseEvent<HTMLButtonElement>) {
     e.preventDefault()
+    e.stopPropagation()
     if (!canSubmit) return
     startTransition(async () => {
       const result = await createTerraceRequestAction({
@@ -94,10 +99,7 @@ export function TerraceRequestForm() {
   }
 
   return (
-    <form
-      onSubmit={handleSubmit}
-      className="flex flex-col gap-4 rounded-md border border-amber-500/40 bg-amber-500/5 p-4"
-    >
+    <div className="flex flex-col gap-4 rounded-md border border-amber-500/40 bg-amber-500/5 p-4">
       <div className="flex items-start justify-between gap-2">
         <div>
           <h3 className="text-sm font-semibold text-amber-700">Terraza Superior — Evento especial</h3>
@@ -127,7 +129,6 @@ export function TerraceRequestForm() {
               setDate(e.target.value)
               setTime('')
             }}
-            required
           />
         </div>
         <div className="flex flex-col gap-2">
@@ -136,7 +137,6 @@ export function TerraceRequestForm() {
             id="terrace-time"
             value={time}
             onChange={(e) => setTime(e.target.value)}
-            required
             className="h-9 rounded-md border border-input bg-background px-3 text-sm"
           >
             <option value="">Selecciona una hora</option>
@@ -158,22 +158,21 @@ export function TerraceRequestForm() {
           max={MAX_TERRACE_GUESTS}
           value={guestCount}
           onChange={(e) => setGuestCount(Number(e.target.value))}
-          required
         />
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="flex flex-col gap-2 sm:col-span-2">
           <Label htmlFor="terrace-name">Nombre completo</Label>
-          <Input id="terrace-name" value={name} onChange={(e) => setName(e.target.value)} required />
+          <Input id="terrace-name" value={name} onChange={(e) => setName(e.target.value)} />
         </div>
         <div className="flex flex-col gap-2">
           <Label htmlFor="terrace-phone">Teléfono</Label>
-          <Input id="terrace-phone" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} required />
+          <Input id="terrace-phone" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} />
         </div>
         <div className="flex flex-col gap-2">
           <Label htmlFor="terrace-email">Email</Label>
-          <Input id="terrace-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+          <Input id="terrace-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
         </div>
         <div className="flex flex-col gap-2 sm:col-span-2">
           <Label htmlFor="terrace-notes">
@@ -202,9 +201,9 @@ export function TerraceRequestForm() {
         </span>
       </label>
 
-      <Button type="submit" disabled={!canSubmit} className={cn('w-full')}>
+      <Button type="button" onClick={handleSend} disabled={!canSubmit} className={cn('w-full')}>
         {isPending ? 'Enviando…' : 'Enviar solicitud'}
       </Button>
-    </form>
+    </div>
   )
 }
