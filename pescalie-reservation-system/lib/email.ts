@@ -2,8 +2,8 @@
 
 const RESEND_API_URL = 'https://api.resend.com/emails'
 const FROM_EMAIL = 'Pescalie <no-responder@pescalie.com>'
-const ADMIN_EMAIL = 'piratacastillobar@gmail.com'
-
+const ADMIN_EMAIL = 'cofradiacastilloelpirata@gmail.com'
+const GOOGLE_REVIEW_LINK = 'https://share.google/8nZbNldDVabWGZsxk'
 async function sendEmail({
   to,
   subject,
@@ -50,17 +50,21 @@ export async function sendReservationConfirmationEmail(info: ReservationEmailInf
     to: info.clientEmail,
     subject: 'Tu reserva en Pescalie está confirmada',
     html: `
-      <div style="font-family: sans-serif; color: #1a1a1a;">
+      <div style="font-family: sans-serif; color: #1a1a1a; line-height: 1.6;">
         <h2>¡Reserva confirmada!</h2>
-        <p>Hola ${info.clientName},</p>
-        <p>Hemos guardado tu mesa con estos datos:</p>
+        <p>Estimado/a ${info.clientName},</p>
+        <p>Le confirmamos que su mesa ha quedado reservada con los siguientes datos:</p>
         <ul>
           <li><strong>Fecha:</strong> ${info.formattedDate}</li>
           <li><strong>Hora:</strong> ${info.time}</li>
           <li><strong>Comensales:</strong> ${info.partySize}</li>
         </ul>
-        <p>Si necesitas cancelar o modificar tu reserva, contacta con nosotros.</p>
-        <p>¡Te esperamos!</p>
+        <p>Será un placer atenderle. Como muestra de agradecimiento, si comparte su experiencia con una reseña en Google tras su visita, le invitamos a un chupito de ron miel de la casa.</p>
+        <p>
+          <a href="${GOOGLE_REVIEW_LINK}" style="color: #0a7d5f;">Dejar una reseña en Google</a>
+        </p>
+        <p>Si necesita cancelar o modificar su reserva, no dude en contactar con nosotros.</p>
+        <p>Un cordial saludo,<br>Pescalie</p>
       </div>
     `,
   })
