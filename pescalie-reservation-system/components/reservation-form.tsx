@@ -6,8 +6,10 @@ import { createReservationAction } from '@/app/actions/reservations'
 import { createClient } from '@/lib/supabase/client'
 import {
   getSlotsForDate,
-  MAX_CAPACITY,
   MAX_PARTY_SIZE,
+  MAX_TABLES,
+  WHATSAPP_DISPLAY,
+  whatsappLink,
   formatLongDate,
   todayISO,
 } from '@/lib/reservations'
@@ -17,73 +19,84 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { cn } from '@/lib/utils'
 
-type Availability =
-  | { state: 'idle' }
-  | { state: 'loading' }
-  | { state: 'ready'; remaining: number }
-  | { state: 'error' }
-
 export function ReservationForm() {
   const today = useMemo(() => todayISO(), [])
 
   const [date, setDate] = useState(today)
   const [time, setTime] = useState<string>('')
-  const slots = useMemo(() => getSlotsForDate(date), [date])
   const [partySize, setPartySize] = useState(2)
   const [name, setName] = useState('')
   const [phone, setPhone] = useState('')
   const [email, setEmail] = useState('')
   const [notes, setNotes] = useState('')
 
-  const [availability, setAvailability] = useState<Availability>({ state: 'idle' })
+  const slots = useMemo(() => getSlotsForDate(date), [date])
+
+  // Mapa hora -> mesas disponibles para la fecha elegida.
+  const [availabilityMap, setAvailabilityMap] = useState<Record<string, number>>({})
+  const [loadingAvailability, setLoadingAvailability] = useState(false)
+  const [availabilityError, setAvailabilityError] = useState(false)
+  const [refreshKey, setRefreshKey] = useState(0)
+
   const [isPending, startTransition] = useTransition()
   const [done, setDone] = useState<null | { remaining: number }>(null)
 
-
-  // Si cambia la fecha y la hora elegida ya no es válida para ese día, la reseteamos.
+  // Si cambia la fecha y la hora elegida ya no es válida para ese día, se deselecciona.
   useEffect(() => {
     if (time && !slots.some((s) => s.value === time)) {
       setTime('')
     }
   }, [slots, time])
-  // Live capacity check against Supabase whenever date/time changes.
+
+  // Consulta la disponibilidad de TODAS las horas del día elegido, para poder
+  // desactivar en los botones las que ya no tienen mesa.
   useEffect(() => {
-    if (!date || !time) {
-      setAvailability({ state: 'idle' })
-      return
-    }
     let cancelled = false
-    setAvailability({ state: 'loading' })
+    setLoadingAvailability(true)
+    setAvailabilityError(false)
     const supabase = createClient()
-    const handle = setTimeout(async () => {
-      const { data, error } = await supabase.rpc('available_capacity', {
-        p_date: date,
-        p_time: time,
+
+    Promise.all(
+      slots.map(async (slot) => {
+        const { data, error } = await supabase.rpc('available_capacity', {
+          p_date: date,
+          p_time: slot.value,
+        })
+        if (error) throw error
+        return [slot.value, Math.max(0, Number(data) || 0)] as const
+      }),
+    )
+      .then((entries) => {
+        if (cancelled) return
+        setAvailabilityMap(Object.fromEntries(entries))
       })
-      if (cancelled) return
-      if (error) {
-        setAvailability({ state: 'error' })
-        return
-      }
-      setAvailability({ state: 'ready', remaining: Math.max(0, Number(data) || 0) })
-    }, 250)
+      .catch(() => {
+        if (cancelled) return
+        setAvailabilityError(true)
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingAvailability(false)
+      })
+
     return () => {
       cancelled = true
-      clearTimeout(handle)
     }
-  }, [date, time])
+  }, [date, slots, refreshKey])
 
-  const remaining = availability.state === 'ready' ? availability.remaining : null
-  const overCapacity = remaining !== null && partySize > remaining
+  const remaining = time ? availabilityMap[time] : undefined
+  const isFull = remaining !== undefined && remaining <= 0
+
   const canSubmit =
     !!date &&
     !!time &&
     partySize >= 1 &&
+    partySize <= MAX_PARTY_SIZE &&
     name.trim().length >= 2 &&
     phone.trim().length >= 6 &&
     /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()) &&
-    availability.state === 'ready' &&
-    !overCapacity &&
+    remaining !== undefined &&
+    !isFull &&
+    !availabilityError &&
     !isPending
 
   function handleSubmit(e: React.FormEvent) {
@@ -106,12 +119,18 @@ export function ReservationForm() {
         })
       } else {
         toast.error('No se pudo reservar', { description: result.message })
-        // Refresh capacity in case the turn filled up.
-        setAvailability({ state: 'idle' })
-        setTime((t) => t)
+        // La mesa pudo ocuparse mientras rellenabas el formulario: refrescamos disponibilidad.
+        setRefreshKey((k) => k + 1)
       }
     })
   }
+
+  const whatsappMsg = whatsappLink(
+    `Hola, quiero reservar mesa para más de ${MAX_PARTY_SIZE} personas` +
+      (date ? ` el ${formatLongDate(date)}` : '') +
+      (time ? ` a las ${time}` : '') +
+      '.',
+  )
 
   if (done) {
     return (
@@ -139,6 +158,7 @@ export function ReservationForm() {
             setNotes('')
             setTime('')
             setPartySize(2)
+            setRefreshKey((k) => k + 1)
           }}
         >
           Hacer otra reserva
@@ -165,7 +185,19 @@ export function ReservationForm() {
       {/* Time slots */}
       <div className="flex flex-col gap-3">
         <Label>Turno</Label>
-        <SlotGroup title="Horas disponibles" slots={slots} value={time} onSelect={setTime} />
+        {slots.length === 0 ? (
+          <p className="rounded-md bg-muted px-4 py-3 text-sm text-muted-foreground">
+            No quedan horas disponibles para hoy. Elige otro día.
+          </p>
+        ) : (
+          <SlotGroup
+            slots={slots}
+            value={time}
+            onSelect={setTime}
+            availabilityMap={availabilityMap}
+            loading={loadingAvailability}
+          />
+        )}
       </div>
 
       {/* Party size */}
@@ -197,10 +229,22 @@ export function ReservationForm() {
           </Button>
           <span className="text-xs text-muted-foreground">Máx. {MAX_PARTY_SIZE} por reserva</span>
         </div>
+        
+          href={whatsappMsg}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-xs text-primary underline underline-offset-2"
+        >
+          ¿Sois más de {MAX_PARTY_SIZE}? Escríbenos por WhatsApp al {WHATSAPP_DISPLAY}
+        </a>
       </div>
 
       {/* Availability status */}
-      <AvailabilityBadge availability={availability} partySize={partySize} time={time} />
+      <AvailabilityBadge
+        hasTime={!!time}
+        remaining={remaining}
+        error={availabilityError}
+      />
 
       {/* Contact fields */}
       <div className="grid gap-4 sm:grid-cols-2">
@@ -261,84 +305,86 @@ export function ReservationForm() {
 }
 
 function SlotGroup({
-  title,
   slots,
   value,
   onSelect,
+  availabilityMap,
+  loading,
 }: {
-  title: string
   slots: { value: string; label: string }[]
   value: string
   onSelect: (v: string) => void
+  availabilityMap: Record<string, number>
+  loading: boolean
 }) {
   return (
-    <div className="flex flex-col gap-2">
-      <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-        {title}
-      </span>
-      <div className="flex flex-wrap gap-2">
-        {slots.map((slot) => (
+    <div className="flex flex-wrap gap-2">
+      {slots.map((slot) => {
+        const known = availabilityMap[slot.value]
+        const full = !loading && known === 0
+        return (
           <button
             key={slot.value}
             type="button"
-            onClick={() => onSelect(slot.value)}
+            onClick={() => !full && onSelect(slot.value)}
             aria-pressed={value === slot.value}
+            disabled={full}
             className={cn(
               'rounded-md border px-3 py-1.5 text-sm font-medium tabular-nums transition-colors',
-              value === slot.value
-                ? 'border-primary bg-primary text-primary-foreground'
-                : 'border-input bg-background text-foreground hover:border-primary/50 hover:bg-secondary',
+              full
+                ? 'cursor-not-allowed border-input bg-muted text-muted-foreground line-through opacity-60'
+                : value === slot.value
+                  ? 'border-primary bg-primary text-primary-foreground'
+                  : 'border-input bg-background text-foreground hover:border-primary/50 hover:bg-secondary',
             )}
           >
             {slot.label}
           </button>
-        ))}
-      </div>
+        )
+      })}
     </div>
   )
 }
 
 function AvailabilityBadge({
-  availability,
-  partySize,
-  time,
+  hasTime,
+  remaining,
+  error,
 }: {
-  availability: Availability
-  partySize: number
-  time: string
+  hasTime: boolean
+  remaining: number | undefined
+  error: boolean
 }) {
-  if (!time || availability.state === 'idle') {
+  if (!hasTime) {
     return (
       <p className="rounded-md bg-muted px-4 py-3 text-sm text-muted-foreground">
-        Elige un turno para ver las plazas disponibles.
+        Elige un turno para ver las mesas disponibles.
       </p>
     )
   }
-  if (availability.state === 'loading') {
+  if (error) {
+    return (
+      <p className="rounded-md bg-destructive/10 px-4 py-3 text-sm text-destructive">
+        No pudimos comprobar el aforo. Inténtalo de nuevo en unos segundos.
+      </p>
+    )
+  }
+  if (remaining === undefined) {
     return (
       <p className="rounded-md bg-muted px-4 py-3 text-sm text-muted-foreground">
         Comprobando disponibilidad…
       </p>
     )
   }
-  if (availability.state === 'error') {
-    return (
-      <p className="rounded-md bg-destructive/10 px-4 py-3 text-sm text-destructive">
-        No pudimos comprobar el aforo. Asegúrate de haber instalado el esquema SQL.
-      </p>
-    )
-  }
 
-  const { remaining } = availability
   const full = remaining <= 0
-  const over = partySize > remaining
-  const pct = Math.round(((MAX_CAPACITY - remaining) / MAX_CAPACITY) * 100)
+  const pct = Math.round(((MAX_TABLES - remaining) / MAX_TABLES) * 100)
 
   return (
     <div
       className={cn(
         'flex flex-col gap-2 rounded-md border px-4 py-3 text-sm',
-        full || over
+        full
           ? 'border-destructive/30 bg-destructive/10 text-destructive'
           : 'border-primary/25 bg-primary/5 text-foreground',
       )}
@@ -346,23 +392,17 @@ function AvailabilityBadge({
       <div className="flex items-center justify-between font-medium">
         <span>
           {full
-            ? 'Turno completo'
-            : `${remaining} de ${MAX_CAPACITY} plazas disponibles`}
+            ? 'Este horario está completo. Por favor, selecciona otro horario.'
+            : `🪑 ${remaining} ${remaining === 1 ? 'mesa disponible' : 'mesas disponibles'}`}
         </span>
-        {!full && !over && <span className="text-primary">Disponible</span>}
-        {over && !full && <span>Supera el aforo</span>}
+        {!full && <span className="text-primary">Disponible</span>}
       </div>
       <div className="h-1.5 w-full overflow-hidden rounded-full bg-border">
         <div
-          className={cn('h-full rounded-full', full || over ? 'bg-destructive' : 'bg-primary')}
+          className={cn('h-full rounded-full', full ? 'bg-destructive' : 'bg-primary')}
           style={{ width: `${Math.min(100, pct)}%` }}
         />
       </div>
-      {over && !full && (
-        <span className="text-xs">
-          Reduce a {remaining} {remaining === 1 ? 'comensal' : 'comensales'} o elige otro turno.
-        </span>
-      )}
     </div>
   )
 }
