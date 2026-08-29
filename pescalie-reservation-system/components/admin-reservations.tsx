@@ -5,7 +5,7 @@ import { useMemo, useState, useTransition } from 'react'
 import { toast } from 'sonner'
 import { updateReservationStatus } from '@/app/actions/admin'
 import {
-  MAX_CAPACITY,
+  MAX_TABLES,
   formatLongDate,
   type Reservation,
   type ReservationStatus,
@@ -115,7 +115,7 @@ export function AdminReservations({
         <SummaryStat label="Reservas del día" value={dayRows.length} />
         <SummaryStat label="Confirmadas" value={dayRows.filter((r) => r.status === 'confirmada').length} />
         <SummaryStat label="Canceladas" value={dayRows.filter((r) => r.status === 'cancelada').length} />
-        <SummaryStat label="Comensales" value={confirmedGuests} hint={`aforo/turno ${MAX_CAPACITY}`} />
+        <SummaryStat label="Comensales" value={confirmedGuests} hint={`aforo/turno ${MAX_TABLES}`} />
       </div>
 
       <p className="text-sm text-muted-foreground">{formatLongDate(date)}</p>
@@ -138,7 +138,7 @@ export function AdminReservations({
                     Turno {turn.time}
                   </h3>
                   <span className="text-xs text-muted-foreground tabular-nums">
-                    {guests}/{MAX_CAPACITY} plazas
+                    {turn.items.filter((r) => r.status === 'confirmada').length}/{MAX_TABLES} mesas (agrupado por hora exacta, no por solapamiento)
                   </span>
                 </div>
                 <div className="flex flex-col gap-2">
