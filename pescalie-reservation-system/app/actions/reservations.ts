@@ -32,15 +32,12 @@ export async function createReservationAction(
   if (!name || name.length < 2) {
     return { ok: false, message: 'Introduce un nombre válido.' }
   }
-
   if (!/^[0-9+()\s-]{6,20}$/.test(phone)) {
     return { ok: false, message: 'Introduce un teléfono válido.' }
   }
-
   if (!EMAIL_RE.test(email)) {
     return { ok: false, message: 'Introduce un email válido.' }
   }
-
   if (
     !Number.isInteger(partySize) ||
     partySize < 1 ||
@@ -48,17 +45,15 @@ export async function createReservationAction(
   ) {
     return {
       ok: false,
-      message: `El número de comensales debe estar entre 1 y ${MAX_PARTY_SIZE}.`,
+      message: `El número de comensales debe estar entre 1 y ${MAX_PARTY_SIZE}. Para grupos más grandes, escríbenos por WhatsApp.`,
     }
   }
-
   if (!input.date || !/^\d{4}-\d{2}-\d{2}$/.test(input.date)) {
     return { ok: false, message: 'Selecciona una fecha válida.' }
   }
 
   // Validate that the selected time is valid for the selected date.
   const validSlots = getSlotsForDate(input.date)
-
   if (!validSlots.some((s) => s.value === input.time)) {
     return { ok: false, message: 'Selecciona un turno válido.' }
   }
@@ -68,7 +63,6 @@ export async function createReservationAction(
   }
 
   const supabase = await createClient()
-
   const { data, error } = await supabase.rpc('create_reservation', {
     p_date: input.date,
     p_time: input.time,
@@ -96,17 +90,29 @@ export async function createReservationAction(
 
   if (!result?.ok) {
     if (result?.error === 'no_capacity') {
-      const remaining = result.remaining ?? 0
-
       return {
         ok: false,
-        message:
-          remaining > 0
-            ? `Solo quedan ${remaining} plazas en ese turno. Reduce los comensales o elige otro horario.`
-            : 'Ese turno está completo. Por favor elige otro horario.',
+        message: 'Ese horario está completo. Por favor, elige otro horario.',
       }
     }
-
+    if (result?.error === 'slot_not_allowed') {
+      return {
+        ok: false,
+        message: 'Ese horario ya no está disponible. Elige otro turno.',
+      }
+    }
+    if (result?.error === 'party_size_invalid') {
+      return {
+        ok: false,
+        message: `El número de comensales debe estar entre 1 y ${MAX_PARTY_SIZE}.`,
+      }
+    }
+    if (result?.error === 'missing_fields') {
+      return {
+        ok: false,
+        message: 'Faltan datos obligatorios. Revisa el formulario.',
+      }
+    }
     return {
       ok: false,
       message: 'No se pudo completar la reserva. Revisa los datos.',
