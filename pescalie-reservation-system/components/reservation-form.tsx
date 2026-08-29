@@ -228,8 +228,8 @@ export function ReservationForm() {
             +
           </Button>
           <span className="text-xs text-muted-foreground">Máx. {MAX_PARTY_SIZE} por reserva</span>
-        </div>
-        
+          </div>
+        <a
           href={whatsappMsg}
           target="_blank"
           rel="noopener noreferrer"
