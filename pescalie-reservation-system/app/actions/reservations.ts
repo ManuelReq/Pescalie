@@ -1,7 +1,8 @@
 'use server'
 
 import { createClient } from '@/lib/supabase/server'
-import { getSlotsForDate, MAX_PARTY_SIZE } from '@/lib/reservations'
+import { getSlotsForDate, MAX_PARTY_SIZE, formatLongDate } from '@/lib/reservations'
+import { sendReservationConfirmationEmail, sendNewReservationAdminAlert } from '@/lib/email'
 
 export type CreateReservationInput = {
   date: string
@@ -52,7 +53,6 @@ export async function createReservationAction(
     return { ok: false, message: 'Selecciona una fecha válida.' }
   }
 
-  // Validate that the selected time is valid for the selected date.
   const validSlots = getSlotsForDate(input.date)
   if (!validSlots.some((s) => s.value === input.time)) {
     return { ok: false, message: 'Selecciona un turno válido.' }
@@ -118,6 +118,25 @@ export async function createReservationAction(
       message: 'No se pudo completar la reserva. Revisa los datos.',
     }
   }
+
+  // Reserva creada con éxito: enviamos los emails (si fallan, no rompen la reserva).
+  const formattedDate = formatLongDate(input.date)
+  await Promise.all([
+    sendReservationConfirmationEmail({
+      clientEmail: email,
+      clientName: name,
+      formattedDate,
+      time: input.time,
+      partySize,
+    }),
+    sendNewReservationAdminAlert({
+      formattedDate,
+      time: input.time,
+      partySize,
+      clientName: name,
+      clientPhone: phone,
+    }),
+  ])
 
   return {
     ok: true,
