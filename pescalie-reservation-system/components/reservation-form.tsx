@@ -17,6 +17,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { TerraceRequestForm } from '@/components/terrace-request-form'
 import { cn } from '@/lib/utils'
 
 export function ReservationForm() {
@@ -238,7 +239,7 @@ export function ReservationForm() {
           ¿Sois más de {MAX_PARTY_SIZE}? Escríbenos por WhatsApp al {WHATSAPP_DISPLAY}
         </a>
       </div>
-
+      <TerraceRequestForm />
       {/* Availability status */}
       <AvailabilityBadge
         hasTime={!!time}
