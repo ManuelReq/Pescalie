@@ -111,3 +111,63 @@ export async function sendNewReservationAdminAlert(info: {
     `,
   })
 }
+
+
+/** Email al cliente cuando solicita la terraza superior (aún no confirmado). */
+export async function sendTerraceRequestClientEmail(info: {
+  clientEmail: string
+  clientName: string
+  formattedDate: string
+  time: string
+  guestCount: number
+}) {
+  await sendEmail({
+    to: info.clientEmail,
+    subject: 'Hemos recibido tu solicitud para la Terraza Superior',
+    html: `
+      <div style="font-family: sans-serif; color: #1a1a1a; line-height: 1.6;">
+        <h2>Solicitud recibida</h2>
+        <p>Estimado/a ${info.clientName},</p>
+        <p>Hemos recibido su solicitud para celebrar un evento especial en nuestra Terraza Superior:</p>
+        <ul>
+          <li><strong>Fecha:</strong> ${info.formattedDate}</li>
+          <li><strong>Hora:</strong> ${info.time}</li>
+          <li><strong>Invitados:</strong> ${info.guestCount}</li>
+        </ul>
+        <p>Esta zona requiere confirmación de disponibilidad por nuestra parte. Nos pondremos en contacto con usted en breve para confirmar los detalles.</p>
+        <p>Un cordial saludo,<br>Pescalie</p>
+      </div>
+    `,
+  })
+}
+
+/** Email interno cuando llega una solicitud de terraza superior. */
+export async function sendTerraceRequestAdminAlert(info: {
+  formattedDate: string
+  time: string
+  guestCount: number
+  clientName: string
+  clientPhone: string
+  clientEmail: string
+  notes: string
+}) {
+  await sendEmail({
+    to: ADMIN_EMAIL,
+    subject: `Nueva solicitud Terraza Superior: ${info.formattedDate} a las ${info.time}`,
+    html: `
+      <div style="font-family: sans-serif; color: #1a1a1a;">
+        <h2>Solicitud de evento especial — Terraza Superior</h2>
+        <p>Recuerda contactar con el cliente para confirmar disponibilidad.</p>
+        <ul>
+          <li><strong>Fecha:</strong> ${info.formattedDate}</li>
+          <li><strong>Hora:</strong> ${info.time}</li>
+          <li><strong>Invitados:</strong> ${info.guestCount}</li>
+          <li><strong>Nombre:</strong> ${info.clientName}</li>
+          <li><strong>Teléfono:</strong> ${info.clientPhone}</li>
+          <li><strong>Email:</strong> ${info.clientEmail}</li>
+          ${info.notes ? `<li><strong>Notas:</strong> ${info.notes}</li>` : ''}
+        </ul>
+      </div>
+    `,
+  })
+}
