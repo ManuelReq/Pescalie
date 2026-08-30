@@ -28,10 +28,13 @@ async function sendEmail({
       },
       body: JSON.stringify({ from: FROM_EMAIL, to, subject, html }),
     })
-    if (!res.ok) {
-      const text = await res.text()
-      console.error('[email] Error al enviar:', res.status, text)
-    }
+    const text = await res.text()
+
+  console.log('[email] Resend respuesta:', {
+    status: res.status,
+    body: text,
+    to,
+  })
   } catch (err) {
     console.error('[email] Excepción al enviar:', err)
   }
