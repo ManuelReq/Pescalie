@@ -21,10 +21,10 @@ export default function HomePage() {
         </div>
         <div className="mx-auto flex max-w-5xl flex-col items-center px-5 pb-10 pt-16 text-center sm:pt-24">
           <span className="mb-4 inline-flex items-center gap-2 rounded-full border border-border/70 bg-card/60 px-4 py-1.5 text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground backdrop-blur">
-            Cocina marinera · Desde 1998
+            Cocina marinera · Desde 1968
           </span>
           <h1 className="text-balance font-serif text-5xl font-light leading-tight text-foreground sm:text-6xl">
-            Pescalie
+            Cofradía de Pescadores El Castillo
           </h1>
           <p className="mt-4 max-w-xl text-pretty text-base text-muted-foreground sm:text-lg">
             Producto del mar, de temporada y de lonja. Reserva tu mesa y déjanos
